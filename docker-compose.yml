@@ -1,0 +1,75 @@
+services:
+  web:
+    build: .
+    volumes:
+      - .:/data-synchronizer-service
+    ports:
+      - 8083:8083
+    command: ./runserver.sh
+    env_file:
+      - global-variables.env
+    links:
+      - postgres:postgres
+    depends_on:
+      - postgres
+    networks:
+      - rpg-net
+
+  postgres:
+    image: postgres
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: always
+    env_file:
+      - global-variables.env
+    networks:
+      - rpg-net
+
+  redis:
+    image: "redis:alpine"
+    networks:
+      - rpg-net
+
+  celery:
+    build: .
+    command: celery -A core worker -l info
+    volumes:
+      - .:/data-synchronizer-service
+    depends_on:
+      - redis
+    env_file:
+      - global-variables.env
+    networks:
+      - rpg-net
+
+  celery-beat:
+    build: .
+    command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/data-synchronizer-service
+    depends_on:
+      - redis
+    env_file:
+      - global-variables.env
+    networks:
+      - rpg-net
+
+  flower:
+    build: .
+    command: celery -A core flower --port=5555
+    volumes:
+      - .:/data-synchronizer-service
+    ports:
+      - 5555:5555
+    links:
+      - postgres
+      - redis
+    env_file:
+      - global-variables.env
+    networks:
+      - rpg-net
+
+networks:
+  rpg-net:
+    name: rpg-net
+    external: true
